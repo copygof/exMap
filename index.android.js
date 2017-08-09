@@ -19,6 +19,10 @@ TouchableOpacity,
 TextInput
 } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
+import Geocoder from 'react-native-geocoder';
+const MY_KEY = 'AIzaSyCGYaDkW-n-bLIVfisWBTAsjMzFS7eZKhA'
+
+Geocoder.fallbackToGoogle(MY_KEY);
 
 const { width, height } = Dimensions.get('window');
 
@@ -67,21 +71,42 @@ class GPlacesDemo extends Component {
     isFocus: false,
     animScrollView: new Animated.Value(height - 100),
     markers: [],
+    coordinate: new MapView.AnimatedRegion({
+      latitude: LATITUDE,
+      longitude: LONGITUDE,
+    }),
+  }
+  animate(latitude, longitude) {
+    const { coordinate } = this.state;
+    coordinate.timing({
+      latitude: latitude * (LATITUDE_DELTA / 2),
+      longitude: longitude * (LONGITUDE_DELTA / 2),
+    }).start();
   }
 
-  
-
   componentDidMount() {
-    this.watchID = navigator.geolocation.watchPosition((position) => {
-       console.log('position', position)
-    });
+    
+    // this.watchID = navigator.geolocation.watchPosition((position) => {
+    //   console.log('position', position) 
+    //   const { latitude, longitude } = position.coords
+    //   Geocoder.geocodePosition({latitude, longitude})
+    //   .then(value => {
+    //     console.log('Geocoder', value)
+    //   })
+    // });
     this.watchIDs = navigator.geolocation.getCurrentPosition((position) => {
-       console.log('position', position)
+        console.log('position', position) 
+        const { latitude: lat, longitude: lng } = position.coords
+        Geocoder.geocodePosition({lat, lng})
+        .then(value => {
+          console.log('Geocoder', value)
+        })
     });
     RNGooglePlaces.getCurrentPlace()
     .then((results) => {      
       const { latitude = '', longitude = '' } = results[0]
-      console.log(latitude, longitude)
+      // console.log(latitude, longitude)
+      this.animate(latitude, longitude)
       this.setState({
         region: {
           ...this.state.region,
@@ -89,8 +114,16 @@ class GPlacesDemo extends Component {
           longitude
         }
       })
+      return fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${MY_KEY}`)
     })
+    .then(res => res.json())
+    .then(value => console.log('fetch', value))
     .catch((error) => console.log(error.message));
+
+
+    
+
+
     //  RNGooglePlaces.openPlacePickerModal({
     //    latitude: 53.544389,
 	  // longitude: -113.490927,
@@ -136,6 +169,7 @@ class GPlacesDemo extends Component {
                 ]
               })
               this.closeAnimScrollView()
+              this.animate(latitude, longitude)
             })
             .catch((error) => console.log(error.message));
           }}>
@@ -155,15 +189,28 @@ class GPlacesDemo extends Component {
         },
       ],
     })
-    RNGooglePlaces.getAutocompletePredictions('cities', {
-      // type: 'cities',
-      radius: 10,
-      ...e.nativeEvent.coordinate
-    })
+    const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate
+    Geocoder.geocodePosition({lat, lng})
+    .then(value => {
+      console.log('Geocoder', value)
+      this.setState({ textInput: value[0].formattedAddress })
+      RNGooglePlaces.getAutocompletePredictions(value[0].formattedAddress)
       .then((place) => {
-      console.log(place);
+        this.setState({ place })
       })
-      .catch(error => console.log(error.message));
+    })
+    // RNGooglePlaces.getAutocompletePredictions('cities', {
+    //   // type: 'cities',
+    //   radius: 10,
+    //   ...e.nativeEvent.coordinate
+    // })
+    //   .then((place) => {
+    //   console.log(place);
+    //   })
+    //   .catch(error => console.log(error.message));
+  }
+  onRegionChange(region) {
+    this.setState({ region });
   }
   render() {
              // console.log('place', this.state.place)
@@ -178,13 +225,13 @@ class GPlacesDemo extends Component {
               region={this.state.region}
             >
             </MapView.Animated> */}
-            <MapView
+            <MapView.Animated
               style={styles.map}
               region={this.state.region}
               initialRegion={this.state.region}
               onPress={(e) => this.onMapPress(e)}
               showsUserLocation={true}
-              
+              onRegionChange={this.onRegionChange.bind(this)}
             >
               {this.state.markers.map(marker => (
                 <MapView.Marker
@@ -193,7 +240,7 @@ class GPlacesDemo extends Component {
                   pinColor={marker.color}
                 />
               ))}
-            </MapView>
+            </MapView.Animated>
           </View>
           <SearchLocation
           placeholder={'Where your go ?'}
